@@ -36,6 +36,7 @@ sys.excepthook = handle_exception
 
 USD = "USD"
 GBP = "GBP"
+EUR = "EUR"
 
 
 def get_discount_code():
@@ -96,6 +97,7 @@ class Rule:
     requires_discount_code: bool = False
     discount_code: str = None
     amount_decrease: int = 0
+    amount_increase: int = 0
 
 
 @dataclass
@@ -107,6 +109,7 @@ class PriceList:
 
 price_list1 = PriceList(**{"name": "USD default pricelist", "currency": USD})
 price_list2 = PriceList(**{"name": "GBP default pricelist", "currency": GBP})
+price_list3 = PriceList(**{"name": "EUR default pricelist", "currency": EUR})
 
 
 rule1 = Rule(
@@ -150,10 +153,22 @@ rule4 = Rule(
     }
 )
 
+rule5 = Rule(
+    **{
+        "name": "Make one hundred units more expensive",
+        "requires_discount_code": False,
+        "affects_sell_price": True,
+        "affects_interval_price": True,
+        "amount_decrease": 0,
+        "amount_increase": 100,
+    }
+)
+
 
 # Price lists have an array of rules attached
 price_list1.rules = [rule1, rule4]
 price_list2.rules = [rule3]
+price_list3.rules = [rule5]
 
 
 plan1 = Plan(
@@ -187,7 +202,7 @@ plan3 = Plan(
 
 
 plan1.price_lists = [price_list1, price_list2]
-plan2.price_lists = [price_list1, price_list2]
+plan2.price_lists = [price_list1, price_list2, price_list3]
 
 
 def applyRules(plan, rules=[], context={}):
@@ -217,6 +232,10 @@ def applyRules(plan, rules=[], context={}):
 
     def apply_amount_decrease(base: int, amount_decrease: int) -> int:
         base -= amount_decrease
+        return base
+
+    def apply_amount_increase(base: int, amount_increase: int) -> int:
+        base += amount_increase
         return base
 
     def check_discount_code_valid(expected_discount_code=None, f=None) -> bool:
@@ -277,6 +296,10 @@ def applyRules(plan, rules=[], context={}):
                     sell_price, rule.amount_decrease
                 )  # noqa: E501
 
+                sell_price = apply_amount_increase(
+                    sell_price, rule.amount_increase
+                )  # noqa: E501
+
             if rule.affects_interval_price:
 
                 if rule.percent_increase:
@@ -293,6 +316,10 @@ def applyRules(plan, rules=[], context={}):
                     interval_price, rule.amount_decrease
                 )  # noqa: E501
 
+                interval_price = apply_amount_increase(
+                    interval_price, rule.amount_increase
+                )  # noqa: E501
+
             log.debug(f"after apply_rules sell price is: {sell_price}")
             log.debug(f"after apply_rules interval_price is: {interval_price}")
 
@@ -305,7 +332,10 @@ def applyRules(plan, rules=[], context={}):
     return sell_price, interval_price
 
 
-# First validate that GBP pricelist, 100% discount
+# First validate that GBP pricelist, 100% discount, with discount_code 'xmas'
+# Note the discount_code is past via get_discount_code this is to support being
+# able to get a discount code from 'anywhere', the programmer must write a callable # noqa: E501
+# which returns a string see 'check_discount_code_valid'.
 sell_price, interval_price = plan1.getPrice("GBP")
 
 assert sell_price == 0
@@ -317,4 +347,6 @@ sell_price, interval_price = plan1.getPrice("USD")
 assert sell_price == 548
 assert interval_price == 9
 
-sell_price, interval_price = plan3.getPrice("GBP")
+# EUR with 100 units (cents) price increae rule applied
+sell_price, interval_price = plan2.getPrice("EUR")
+assert sell_price == 1600
