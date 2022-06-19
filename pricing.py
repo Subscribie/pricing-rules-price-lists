@@ -1,4 +1,38 @@
 from dataclasses import dataclass
+import logging
+import os
+import sys
+
+PYTHON_LOG_LEVEL = os.getenv("PYTHON_LOG_LEVEL", "DEBUG")
+
+log = logging.getLogger()
+handler = logging.StreamHandler()
+formatter = logging.Formatter(
+    "%(asctime)s %(name)-12s %(levelname)-8s %(message)s %(funcName)s %(pathname)s:%(lineno)d"  # noqa: E501
+)
+
+# https://docs.python.org/3/library/logging.html#logging.Handler
+handler.setFormatter(formatter)
+handler.setLevel(
+    PYTHON_LOG_LEVEL
+)  # Both loggers and handlers have a setLevel method  noqa
+log.addHandler(handler)
+
+log.setLevel(PYTHON_LOG_LEVEL)
+
+
+# Log all uncuaght exceptions
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    log.critical(
+        "Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback)
+    )  # noqa: E501
+
+
+sys.excepthook = handle_exception
+
 
 USD = "USD"
 GBP = "GBP"
@@ -24,21 +58,21 @@ class Plan:
         a given currency"""
 
         # Find price_lists for plan
-        print(f"Get correct price_list for currency {currency}")
+        log.debug(f"Get correct price_list for currency {currency}")
         # if no price_list assigned, fallback to base prices
         if len(self.price_lists) == 0:
-            print(
+            log.debug(
                 f"Returning base prices sell: {self.sell_price}. interval: {self.interval_price}"  # noqa: E501
             )
             return self.sell_price, self.interval_price
         for price_list in self.price_lists:
-            print(f"only use price list if currency {currency}")
+            log.debug(f"only use price list if currency {currency}")
 
             if price_list.currency == currency:
-                print(f"Correct priceList is: {price_list}")
+                log.debug(f"Correct priceList is: {price_list}")
                 foundRules = []
                 for rule in price_list.rules:
-                    print(f"{rule}")
+                    log.debug(f"Found rule: {rule}")
                     foundRules.append(rule)
 
                 # Pass callable get_discount_code to support external context (e.g. session data) # noqa: E501
@@ -47,8 +81,8 @@ class Plan:
                     self, rules=foundRules, context=context
                 )
 
-        print(f"getPrice: sell price: {sell_price}")
-        print(f"getPrice: interval p: {interval_price}")
+        log.debug(f"getPrice: sell price: {sell_price}")
+        log.debug(f"getPrice: interval p: {interval_price}")
         return sell_price, interval_price
 
 
@@ -163,13 +197,13 @@ def applyRules(plan, rules=[], context={}):
     :param rules: List of rules to apply to the plan price
     :param context: Dictionary storing session context, for example get_discount_code callable for validating discount codes # noqa: E501
     """
-    print(f"the plan is: {plan}")
+    log.debug(f"the plan is: {plan}")
 
     sell_price = plan.sell_price
     interval_price = plan.interval_price
 
-    print(f"before apply_rules sell price is: {plan.sell_price}")
-    print(f"before apply_rules inverval_price is: {plan.interval_price}")
+    log.debug(f"before apply_rules sell price is: {plan.sell_price}")
+    log.debug(f"before apply_rules inverval_price is: {plan.interval_price}")
 
     def apply_percent_increase(base: int, percent_increase: int) -> int:
         add = int((base / 100) * percent_increase)
@@ -216,7 +250,7 @@ def applyRules(plan, rules=[], context={}):
         :rtype tuple
         """
         for rule in rules:
-            print(f"applying rule {rule}")
+            log.debug(f"applying rule {rule}")
 
             if rule.requires_discount_code:
                 expected_discount_code = rule.discount_code
@@ -259,8 +293,8 @@ def applyRules(plan, rules=[], context={}):
                     interval_price, rule.amount_decrease
                 )  # noqa: E501
 
-            print(f"after apply_rules sell price is: {sell_price}")
-            print(f"after apply_rules interval_price is: {interval_price}")
+            log.debug(f"after apply_rules sell price is: {sell_price}")
+            log.debug(f"after apply_rules interval_price is: {interval_price}")
 
         return sell_price, interval_price
 
